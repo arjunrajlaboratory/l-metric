@@ -115,6 +115,7 @@ class LMetricCalculator:
         Parameters:
         interactive (bool): If True, create an interactive plotly heatmap. If False, create a static matplotlib heatmap.
         cmap (list of lists, optional): Custom color scale for interactive plot. If None, a default custom scale is used.
+        use_ordering (str): If "row", use row ordering. If "col", use column ordering. If "both", use both row and column ordering.
         **kwargs: Additional keyword arguments to pass to the plotting function
         Returns:
         self: Returns the instance for method chaining
