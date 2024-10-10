@@ -28,33 +28,40 @@ class LMetricCalculator:
         gene1 (str): Name of the first gene
         gene2 (str): Name of the second gene
         Returns:
-        tuple: (area_difference_normalized, total_area_normalized)
+        tuple: (normalized_l_metric, raw_l_metric)
         """
         gene1_counts = self.df[gene1]
         gene2_counts = self.df[gene2]
 
         df_genes = pd.DataFrame({gene1: gene1_counts, gene2: gene2_counts})
-        df_genes[f"random_{gene2}"] = np.random.permutation(df_genes[gene2].values)
+        df_genes[f"equal_{gene2}"] = np.sum(df_genes[gene2]) / len(df_genes[gene2])
         df_sorted = df_genes.sort_values(by=gene1, ascending=False).reset_index(drop=True)
+        df_sorted[f"negative_{gene2}"] = df_sorted[gene2].sort_values(ascending=True).values
+        df_sorted[f"positive_{gene2}"] = df_sorted[gene2].sort_values(ascending=False).values
 
         cumsum_gene1 = df_sorted[gene1].cumsum().values
         cumsum_gene2 = df_sorted[gene2].cumsum().values
-        cumsum_random_gene2 = df_sorted[f"random_{gene2}"].cumsum().values
+        cumsum_equal_gene2 = df_sorted[f"equal_{gene2}"].cumsum().values
+        cumsum_negative_gene2 = df_sorted[f"negative_{gene2}"].cumsum().values
+        cumsum_positive_gene2 = df_sorted[f"positive_{gene2}"].cumsum().values
 
-        deltaX = np.diff(cumsum_gene1)
-        Y = cumsum_gene2 - cumsum_random_gene2
-        deltaY = (Y[:-1] + Y[1:]) / 2
-
-        area_difference = np.sum(deltaX * deltaY)
-        total_Y = cumsum_gene2
-        total_area = np.sum(deltaX * (total_Y[:-1] + total_Y[1:]) / 2)
+        deltaX = np.diff(cumsum_gene1) # This is stupid, I should just use the original X values
 
         normalization_factor = cumsum_gene1[-1] * cumsum_gene2[-1]
 
-        area_difference_normalized = area_difference / normalization_factor
-        total_area_normalized = total_area / normalization_factor
+        measured_area = np.sum(deltaX * (cumsum_gene2[:-1] + cumsum_gene2[1:]) / 2) / normalization_factor
+        equal_area = np.sum(deltaX * (cumsum_equal_gene2[:-1] + cumsum_equal_gene2[1:]) / 2) / normalization_factor
+        negative_area = np.sum(deltaX * (cumsum_negative_gene2[:-1] + cumsum_negative_gene2[1:]) / 2) / normalization_factor
+        positive_area = np.sum(deltaX * (cumsum_positive_gene2[:-1] + cumsum_positive_gene2[1:]) / 2) / normalization_factor
 
-        return area_difference_normalized, total_area_normalized
+        raw_l_metric = measured_area - equal_area
+
+        if measured_area > equal_area:
+            normalized_l_metric = (measured_area - equal_area) / (positive_area - equal_area)
+        if measured_area < equal_area:
+            normalized_l_metric = -(measured_area - equal_area) / (negative_area - equal_area)
+
+        return normalized_l_metric, raw_l_metric
 
     def compute_pairwise_l_metrics(self, genes=None):
         """
@@ -226,15 +233,18 @@ class LMetricCalculator:
         gene2_counts = self.df[gene2]
 
         df_genes = pd.DataFrame({gene1: gene1_counts, gene2: gene2_counts})
+        df_genes[f"equal_{gene2}"] = np.sum(df_genes[gene2]) / len(df_genes[gene2])
         df_genes[f"random_{gene2}"] = np.random.permutation(df_genes[gene2].values)
         df_sorted = df_genes.sort_values(by=gene1, ascending=False).reset_index(drop=True)
+        df_sorted[f"negative_{gene2}"] = df_sorted[gene2].sort_values(ascending=True).values
+        df_sorted[f"positive_{gene2}"] = df_sorted[gene2].sort_values(ascending=False).values
 
         # Gene counts plot
         plt.figure(figsize=(10, 6))
         x_values = df_sorted.index
-        plt.scatter(x_values, df_sorted[f"random_{gene2}"], color='green', label="Random", s=10, alpha=0.5)
         plt.scatter(x_values, df_sorted[gene1], color='blue', label=gene1, s=10, alpha=0.5)
         plt.scatter(x_values, df_sorted[gene2], color='red', label=gene2, s=10, alpha=0.5)
+        plt.scatter(x_values, df_sorted[f"random_{gene2}"], color='green', label="Random", s=10, alpha=0.5)
         plt.title('Rank Order Plot')
         plt.xlabel('Index')
         plt.ylabel('Counts')
@@ -244,11 +254,15 @@ class LMetricCalculator:
         # Cumulative sum plot
         cumsum_gene1 = df_sorted[gene1].cumsum().values
         cumsum_gene2 = df_sorted[gene2].cumsum().values
-        cumsum_random_gene2 = df_sorted[f"random_{gene2}"].cumsum().values
+        cumsum_equal_gene2 = df_sorted[f"equal_{gene2}"].cumsum().values
+        cumsum_negative_gene2 = df_sorted[f"negative_{gene2}"].cumsum().values
+        cumsum_positive_gene2 = df_sorted[f"positive_{gene2}"].cumsum().values
 
         plt.figure(figsize=(10, 6))
         plt.plot(cumsum_gene1, cumsum_gene2, color='red', label=f'{gene1} vs. {gene2}')
-        plt.plot(cumsum_gene1, cumsum_random_gene2, color='green', label=f'{gene1} vs. Random {gene2}')
+        plt.plot(cumsum_gene1, cumsum_equal_gene2, color='green', label=f'{gene1} vs. Equal {gene2}')
+        plt.plot(cumsum_gene1, cumsum_negative_gene2, color='blue', label=f'{gene1} vs. Negative {gene2}')
+        plt.plot(cumsum_gene1, cumsum_positive_gene2, color='orange', label=f'{gene1} vs. Positive {gene2}')
         plt.title(f'Cumulative Sum of {gene1} vs. {gene2}')
         plt.xlabel(f'Cumulative Sum of {gene1}')
         plt.ylabel(f'Cumulative Sum of {gene2}')
