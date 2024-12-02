@@ -21,7 +21,9 @@ class LMetricCalculator:
         self.row_order = None
         self.col_order = None
 
-    def compute_l_metric(self, gene1, gene2):
+        self.min_counts = 2
+
+    def compute_l_metric(self, gene1, gene2, verbose=True):
         """
         Compute the L-metric between two genes.
         Parameters:
@@ -33,11 +35,23 @@ class LMetricCalculator:
         gene1_counts = self.df[gene1]
         gene2_counts = self.df[gene2]
 
+        mask = (gene1_counts >= self.min_counts) | (
+            gene2_counts >= self.min_counts)
+        gene1_counts = gene1_counts[mask]
+        gene2_counts = gene2_counts[mask]
+        if verbose:
+            print(
+                f"Keeping {sum(mask)} cells out of {len(mask)} total cells")
+
         df_genes = pd.DataFrame({gene1: gene1_counts, gene2: gene2_counts})
-        df_genes[f"equal_{gene2}"] = np.sum(df_genes[gene2]) / len(df_genes[gene2])
-        df_sorted = df_genes.sort_values(by=gene1, ascending=False).reset_index(drop=True)
-        df_sorted[f"negative_{gene2}"] = df_sorted[gene2].sort_values(ascending=True).values
-        df_sorted[f"positive_{gene2}"] = df_sorted[gene2].sort_values(ascending=False).values
+        df_genes[f"equal_{gene2}"] = np.sum(
+            df_genes[gene2]) / len(df_genes[gene2])
+        df_sorted = df_genes.sort_values(
+            by=gene1, ascending=False).reset_index(drop=True)
+        df_sorted[f"negative_{gene2}"] = df_sorted[gene2].sort_values(
+            ascending=True).values
+        df_sorted[f"positive_{gene2}"] = df_sorted[gene2].sort_values(
+            ascending=False).values
 
         cumsum_gene1 = df_sorted[gene1].cumsum().values
         cumsum_gene2 = df_sorted[gene2].cumsum().values
@@ -45,21 +59,30 @@ class LMetricCalculator:
         cumsum_negative_gene2 = df_sorted[f"negative_{gene2}"].cumsum().values
         cumsum_positive_gene2 = df_sorted[f"positive_{gene2}"].cumsum().values
 
-        deltaX = np.diff(cumsum_gene1) # This is stupid, I should just use the original X values
+        # This is stupid, I should just use the original X values
+        deltaX = np.diff(cumsum_gene1)
 
         normalization_factor = cumsum_gene1[-1] * cumsum_gene2[-1]
 
-        measured_area = np.sum(deltaX * (cumsum_gene2[:-1] + cumsum_gene2[1:]) / 2) / normalization_factor
-        equal_area = np.sum(deltaX * (cumsum_equal_gene2[:-1] + cumsum_equal_gene2[1:]) / 2) / normalization_factor
-        negative_area = np.sum(deltaX * (cumsum_negative_gene2[:-1] + cumsum_negative_gene2[1:]) / 2) / normalization_factor
-        positive_area = np.sum(deltaX * (cumsum_positive_gene2[:-1] + cumsum_positive_gene2[1:]) / 2) / normalization_factor
+        measured_area = np.sum(
+            deltaX * (cumsum_gene2[:-1] + cumsum_gene2[1:]) / 2) / normalization_factor
+        equal_area = np.sum(
+            deltaX * (cumsum_equal_gene2[:-1] + cumsum_equal_gene2[1:]) / 2) / normalization_factor
+        negative_area = np.sum(
+            deltaX * (cumsum_negative_gene2[:-1] + cumsum_negative_gene2[1:]) / 2) / normalization_factor
+        positive_area = np.sum(
+            deltaX * (cumsum_positive_gene2[:-1] + cumsum_positive_gene2[1:]) / 2) / normalization_factor
 
         raw_l_metric = measured_area - equal_area
 
         if measured_area > equal_area:
-            normalized_l_metric = (measured_area - equal_area) / (positive_area - equal_area)
-        if measured_area < equal_area:
-            normalized_l_metric = -(measured_area - equal_area) / (negative_area - equal_area)
+            normalized_l_metric = (
+                measured_area - equal_area) / (positive_area - equal_area)
+        elif measured_area < equal_area:
+            normalized_l_metric = - \
+                (measured_area - equal_area) / (negative_area - equal_area)
+        else:
+            normalized_l_metric = 0.0
 
         return normalized_l_metric, raw_l_metric
 
@@ -82,11 +105,13 @@ class LMetricCalculator:
         gene_pairs = list(permutations(genes, 2))
         for gene1, gene2 in tqdm(gene_pairs, desc="Computing Pairwise L-Metrics"):
             try:
-                metric, _ = self.compute_l_metric(gene1, gene2)
+                metric, _ = self.compute_l_metric(
+                    gene1, gene2, verbose=False)
                 self.l_metric_matrix.loc[gene1, gene2] = metric
             except Exception as e:
                 print(f"Error computing L-metric for {gene1} and {gene2}: {e}")
-                self.l_metric_matrix.loc[gene1, gene2] = np.nan # 0.0  # Could do np.nan, but honestly that just makes more trouble
+                # 0.0  # Could do np.nan, but honestly that just makes more trouble
+                self.l_metric_matrix.loc[gene1, gene2] = np.nan
         return self
 
     def perform_clustering(self, method='average', metric='euclidean', by_row=True, by_col=True):
@@ -101,7 +126,8 @@ class LMetricCalculator:
         self: Returns the instance for method chaining
         """
         if self.l_metric_matrix is None:
-            raise ValueError("L-metric matrix has not been computed yet. Call compute_pairwise_l_metrics first.")
+            raise ValueError(
+                "L-metric matrix has not been computed yet. Call compute_pairwise_l_metrics first.")
 
         matrix = self.l_metric_matrix.fillna(0)
         if by_row:
@@ -128,7 +154,8 @@ class LMetricCalculator:
         self: Returns the instance for method chaining
         """
         if self.l_metric_matrix is None:
-            raise ValueError("L-metric matrix has not been computed yet. Call compute_pairwise_l_metrics first.")
+            raise ValueError(
+                "L-metric matrix has not been computed yet. Call compute_pairwise_l_metrics first.")
         matrix = self.l_metric_matrix
 
         if self.row_order is not None and self.col_order is not None:
@@ -146,10 +173,10 @@ class LMetricCalculator:
             if cmap is None:
                 cmap = [
                     [0.0, 'blue'],
-                    [0.25, 'blue'],
+                    [0.25, 'lightblue'],
                     [0.5, 'white'],
                     [0.75, 'orange'],
-                    [1.0, 'orange']
+                    [1.0, 'darkorange']
                 ]
 
             heatmap = go.Heatmap(
@@ -187,7 +214,8 @@ class LMetricCalculator:
             fig.show()
         else:
             plt.figure(figsize=(10, 10))
-            plt.imshow(matrix, cmap='RdBu_r', vmin=-vmax, vmax=vmax, aspect='auto', **kwargs)
+            plt.imshow(matrix, cmap='RdBu_r', vmin=-vmax,
+                       vmax=vmax, aspect='auto', **kwargs)
             plt.colorbar(label='L-Metric')
             plt.title('Pairwise L-Metric Heatmap')
             plt.xlabel('Genes')
@@ -201,7 +229,7 @@ class LMetricCalculator:
     def plot_hexbin(self, gene1, gene2):
         """
         Plot a hexbin scatter plot of two genes.
-        
+
         Parameters:
         gene1 (str): Name of the first gene
         gene2 (str): Name of the second gene
@@ -209,12 +237,14 @@ class LMetricCalculator:
         gene1_counts = self.df[gene1]
         gene2_counts = self.df[gene2]
 
-        mask = (gene1_counts > 0) | (gene2_counts > 0)
+        mask = (gene1_counts >= self.min_counts) | (
+            gene2_counts >= self.min_counts)
         gene1_counts_nozeros = gene1_counts[mask]
         gene2_counts_nozeros = gene2_counts[mask]
 
         plt.figure(figsize=(8, 6))
-        plt.hexbin(gene1_counts_nozeros, gene2_counts_nozeros, gridsize=50, cmap='Reds', mincnt=1)
+        plt.hexbin(gene1_counts_nozeros, gene2_counts_nozeros,
+                   gridsize=50, cmap='Reds', mincnt=1)
         plt.colorbar(label='Number of Cells')
         plt.title(f"Hexbin Plot of {gene1} vs. {gene2}")
         plt.xlabel(gene1)
@@ -224,7 +254,7 @@ class LMetricCalculator:
     def plot_rank_orders(self, gene1, gene2):
         """
         Plot rank order plots and cumulative sum plots for two genes.
-        
+
         Parameters:
         gene1 (str): Name of the first gene
         gene2 (str): Name of the second gene
@@ -232,19 +262,32 @@ class LMetricCalculator:
         gene1_counts = self.df[gene1]
         gene2_counts = self.df[gene2]
 
+        mask = (gene1_counts >= self.min_counts) | (
+            gene2_counts >= self.min_counts)
+        gene1_counts = gene1_counts[mask]
+        gene2_counts = gene2_counts[mask]
+
         df_genes = pd.DataFrame({gene1: gene1_counts, gene2: gene2_counts})
-        df_genes[f"equal_{gene2}"] = np.sum(df_genes[gene2]) / len(df_genes[gene2])
-        df_genes[f"random_{gene2}"] = np.random.permutation(df_genes[gene2].values)
-        df_sorted = df_genes.sort_values(by=gene1, ascending=False).reset_index(drop=True)
-        df_sorted[f"negative_{gene2}"] = df_sorted[gene2].sort_values(ascending=True).values
-        df_sorted[f"positive_{gene2}"] = df_sorted[gene2].sort_values(ascending=False).values
+        df_genes[f"equal_{gene2}"] = np.sum(
+            df_genes[gene2]) / len(df_genes[gene2])
+        df_genes[f"random_{gene2}"] = np.random.permutation(
+            df_genes[gene2].values)
+        df_sorted = df_genes.sort_values(
+            by=gene1, ascending=False).reset_index(drop=True)
+        df_sorted[f"negative_{gene2}"] = df_sorted[gene2].sort_values(
+            ascending=True).values
+        df_sorted[f"positive_{gene2}"] = df_sorted[gene2].sort_values(
+            ascending=False).values
 
         # Gene counts plot
         plt.figure(figsize=(10, 6))
         x_values = df_sorted.index
-        plt.scatter(x_values, df_sorted[gene1], color='blue', label=gene1, s=10, alpha=0.5)
-        plt.scatter(x_values, df_sorted[gene2], color='red', label=gene2, s=10, alpha=0.5)
-        plt.scatter(x_values, df_sorted[f"random_{gene2}"], color='green', label="Random", s=10, alpha=0.5)
+        plt.scatter(x_values, df_sorted[gene1],
+                    color='blue', label=gene1, s=10, alpha=0.5)
+        plt.scatter(x_values, df_sorted[gene2],
+                    color='red', label=gene2, s=10, alpha=0.5)
+        plt.scatter(x_values, df_sorted[f"random_{gene2}"],
+                    color='green', label="Random", s=10, alpha=0.5)
         plt.title('Rank Order Plot')
         plt.xlabel('Index')
         plt.ylabel('Counts')
@@ -259,10 +302,14 @@ class LMetricCalculator:
         cumsum_positive_gene2 = df_sorted[f"positive_{gene2}"].cumsum().values
 
         plt.figure(figsize=(10, 6))
-        plt.plot(cumsum_gene1, cumsum_gene2, color='red', label=f'{gene1} vs. {gene2}')
-        plt.plot(cumsum_gene1, cumsum_equal_gene2, color='green', label=f'{gene1} vs. Equal {gene2}')
-        plt.plot(cumsum_gene1, cumsum_negative_gene2, color='blue', label=f'{gene1} vs. Negative {gene2}')
-        plt.plot(cumsum_gene1, cumsum_positive_gene2, color='orange', label=f'{gene1} vs. Positive {gene2}')
+        plt.plot(cumsum_gene1, cumsum_gene2, color='red',
+                 label=f'{gene1} vs. {gene2}')
+        plt.plot(cumsum_gene1, cumsum_equal_gene2, color='green',
+                 label=f'{gene1} vs. Equal {gene2}')
+        plt.plot(cumsum_gene1, cumsum_negative_gene2, color='blue',
+                 label=f'{gene1} vs. Negative {gene2}')
+        plt.plot(cumsum_gene1, cumsum_positive_gene2, color='orange',
+                 label=f'{gene1} vs. Positive {gene2}')
         plt.title(f'Cumulative Sum of {gene1} vs. {gene2}')
         plt.xlabel(f'Cumulative Sum of {gene1}')
         plt.ylabel(f'Cumulative Sum of {gene2}')
