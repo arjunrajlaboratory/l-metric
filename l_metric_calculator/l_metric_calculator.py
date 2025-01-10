@@ -18,6 +18,7 @@ class LMetricCalculator:
         """
         self.df = df
         self.l_metric_matrix = None
+        self.thresholded_l_metric_matrix = None
         self.row_order = None
         self.col_order = None
 
@@ -112,6 +113,11 @@ class LMetricCalculator:
                 print(f"Error computing L-metric for {gene1} and {gene2}: {e}")
                 # 0.0  # Could do np.nan, but honestly that just makes more trouble
                 self.l_metric_matrix.loc[gene1, gene2] = np.nan
+        return self
+
+    def threshold_l_metric_matrix(self, threshold=-0.5):
+        self.thresholded_l_metric_matrix = self.l_metric_matrix.applymap(
+            lambda x: 0 if x > threshold else 1)
         return self
 
     def perform_clustering(self, method='average', metric='euclidean', by_row=True, by_col=True):
