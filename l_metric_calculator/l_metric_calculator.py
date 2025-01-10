@@ -18,6 +18,7 @@ class LMetricCalculator:
         """
         self.df = df
         self.l_metric_matrix = None
+        self.thresholded_l_metric_matrix = None
         self.row_order = None
         self.col_order = None
 
@@ -114,7 +115,12 @@ class LMetricCalculator:
                 self.l_metric_matrix.loc[gene1, gene2] = np.nan
         return self
 
-    def perform_clustering(self, method='average', metric='euclidean', by_row=True, by_col=True):
+    def threshold_l_metric_matrix(self, threshold=-0.5):
+        self.thresholded_l_metric_matrix = self.l_metric_matrix.applymap(
+            lambda x: 0 if x > threshold else 1)
+        return self
+
+    def perform_clustering(self, method='average', metric='euclidean', by_row=True, by_col=True, threshold=False):
         """
         Perform hierarchical clustering on the L-metric matrix.
         Parameters:
@@ -122,6 +128,7 @@ class LMetricCalculator:
         metric (str): The distance metric to use for clustering
         by_row (bool): If True, perform clustering by rows
         by_col (bool): If True, perform clustering by columns
+        threshold (bool): If True, use the thresholded L-metric matrix
         Returns:
         self: Returns the instance for method chaining
         """
@@ -129,7 +136,11 @@ class LMetricCalculator:
             raise ValueError(
                 "L-metric matrix has not been computed yet. Call compute_pairwise_l_metrics first.")
 
-        matrix = self.l_metric_matrix.fillna(0)
+        if threshold:
+            matrix = self.thresholded_l_metric_matrix.fillna(0)
+        else:
+            matrix = self.l_metric_matrix.fillna(0)
+
         if by_row:
             dist_matrix = pdist(matrix)
             linkage_matrix = linkage(dist_matrix, method=method, metric=metric)
